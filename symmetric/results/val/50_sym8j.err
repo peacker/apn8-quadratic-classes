@@ -1,0 +1,14 @@
+sym10: n=8, d=52 free bits; per level: 8 4 0 28 8 4 0
+translations: skipped 1164 values
+scaling: pruned 214529 values
+symmetry: skipped 700759 values (symdepth 28, z = 20); checkpoints 740690 calls, 178344 pruned (za = 16)
+shard counters: depth 0: 0, depth 6: 0
+cp k=3: calls 5 pruned 0 maps 5120 time 0.0 s
+cp k=4: calls 5 pruned 2 maps 3075 time 0.0 s
+cp k=5: calls 195491 pruned 177222 maps 19371442 time 6.9 s
+cp k=6: calls 529520 pruned 437 maps 541783522 time 291.5 s
+cp k=7: calls 14693 pruned 0 maps 117544 time 0.1 s
+cp k=8: calls 976 pruned 683 maps 4253 time 0.0 s
+cp total time 298.4 s, wall 311 s
+cpcache: 49689 orbit tables built
+done: nodes 2924176, leaves 293, distinct fingerprints 10

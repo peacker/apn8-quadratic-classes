@@ -1,0 +1,4 @@
+sym10: n=8, d=128 free bits; per level: 5 8 13 18 23 28 33
+symmetry: skipped 4955 values (symdepth 28, z = 34); checkpoints 1022 calls, 976 pruned (za = 50)
+shard counters: depth 0: 0, depth 6: 0
+done: nodes 8218, leaves 0, distinct fingerprints 0
