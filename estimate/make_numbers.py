@@ -154,7 +154,8 @@ for fn in (sumsnap or glob.glob(f"{R}/server_results/epyc*/gen/m*.sum")):
         src = f"mass_w{wid}_{t[1].replace('=', '')}"; o = int(t[6])
         if nsrc(src) != o: continue       # rows not synced yet
         assert int(t[7]) < 10 ** 6, l                  # node limit hit: outputs would be undercounted
-        calls[g].append((srv, int(t[0]), int(t[2]), int(t[3]), int(t[4]), o, src, du, t[-1] == "splitmix2g", int(t[7])))
+        calls[g].append((srv, int(t[0]), int(t[2]), int(t[3]), int(t[4]), o, src, du, t[-1] == "splitmix2g", int(t[7]),
+                         int(t[5])))
 K = set(idx) | S
 WK = len(K) - len(sym) + SYMW
 Karr = np.array(sorted(int(k, 16) for k in K), np.uint64)
@@ -291,6 +292,38 @@ fpP = DP / (WP + DP); out["pubFpred"] = f"{100 * fpP:.3f}"; out["pctPubOutFine"]
 for nm, cl in (("Cpu", [c for c in calls["s"] if not c[8]]), ("Gpu", [c for c in calls["s"] if c[8]])):
     kk = draws_of(cl); ff = float((~np.isin(kk, Parr)).mean())
     out[f"pctPub{nm}Out"] = f"{100 * ff:.2f}"; out[f"pub{nm}SE"] = f"{100 * math.sqrt(ff * (1 - ff) / len(kk)):.2f}"
+# Units of the sampler (review, R3): starts, chain attempts, maps L6 tried, valid L6 (= maps G7), draws (orbits).
+cs = calls["s"]; NS = sum(c[2] for c in cs)
+out["nStarts"] = f"{NS / 1e11:.2f}\\cdot10^{{11}}"; out["chainPerStart"] = f"{sum(c[3] for c in cs) / NS:.2f}"
+out["gsevenPerStart"] = f"{sum(c[10] for c in cs) / NS:.4f}"; out["drawsPerStartE"] = f"{nf / NS * 1e4:.3f}"
+# start-level clustering: starts are independent, so if no start gave two draws the number of draws of a call would
+# be Poisson. The index of dispersion r = Var/mean of the draws per call estimates 1 + E[X(X-1)]/E[X], X = draws of
+# one start; c = r - 1 is the share of draws that share a start with another draw (to first order).
+cup = 0.0
+for nm, cl in (("Cpu", [c for c in cs if not c[8]]), ("Gpu", [c for c in cs if c[8]])):
+    mode = collections.Counter(c[2] for c in cl).most_common(1)[0][0]
+    d = np.array([c[5] // 2 for c in cl if c[2] == mode], float); r = d.var() / d.mean(); se = math.sqrt(2 / len(d))
+    out[f"disp{nm}"] = f"{r:.4f}"; out[f"disp{nm}SE"] = f"{se:.4f}"; out[f"disp{nm}Calls"] = len(d)
+    cup = max(cup, r - 1 + 3 * se)
+out["clusterUp"] = f"{100 * cup:.1f}"
+# Completeness with the uncertainty in m and W (review, R4). With probability about 1 - TAIL (one-sided normal, 3 SE)
+# the number of classes outside the known set is at most m + 3 SE, so W <= W_known + m + 3 SE. Only n (1 - cup) draws
+# are counted, to allow for draws that share a start. P(some class still unseen) <= expected number + TAIL.
+TAIL = 0.00135
+def bound(Wk, mm, mse_):
+    X = mm + 3 * mse_; lam = nf * (1 - cup) / (Wk + X); v = X * math.exp(-lam); return lam, v, v + TAIL
+def up(v, d=2):                                        # round up, so that an upper bound stays an upper bound
+    e = math.floor(math.log10(v))
+    return f"{math.ceil(v * 10 ** d) / 10 ** d:.{d}f}" if v >= 10 ** -d else f"{math.ceil(v / 10 ** e)}\\cdot10^{{{e}}}"
+lP, vP, tP = bound(WP, mP, mPse); lK, vK, tK = bound(WK, u["m"], u["mse"])
+out["pubLamU"] = f"{lP:.2f}"; out["pubExpMissing"] = up(vP, 3); out["pubFail"] = up(tP, 3)
+out["uniLamU"] = f"{lK:.2f}"; out["uniExpMissing"] = up(vK, 4); out["uniFail"] = up(tK, 4)
+out["tailProb"] = f"{TAIL:.5f}".rstrip("0")
+out["nOutPDraws"] = noP; out["nOutKDraws"] = u["no"]
+# frequency of frequencies of the classes outside P (review): how many were drawn once, twice, ...
+with open("figures/freq_of_freq.tsv", "w") as ff_:
+    ff_.write("times_drawn\tclasses_outside_P\n")
+    for k in sorted(fkP): ff_.write(f"{k}\t{fkP[k]}\n")
 gridP = np.linspace(0, nf, 401).astype(np.int64)
 np.savez("figures/uniform.npz", grid=gridP, found=np.searchsorted(firstP, gridP), m=mP, mse=mPse, D=DP, WK=WP)
 # two halves of the uniform draws (time order): the first half and P give a known set K1 that does not depend on
