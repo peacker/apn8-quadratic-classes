@@ -28,7 +28,6 @@ outP = sum(int(c[10]) for c in calls); outK = sum(int(c[11]) for c in calls)
 G = [int(l.split()[2]) for l in open(os.path.join(here, "..", "symmetric", "symmetric_group_orders.txt"))]
 symW = sum(Fraction(1, g) for g in G); nSym = len(G)
 P, K = int(val("nPub")), int(val("nKnownNoFair"))
-D = sum(int(l.split()[1]) for l in open(os.path.join(here, "freq_of_freq.tsv")) if l[0].isdigit())
 
 def count(W0, no):
     f = no / n; return W0 * f / (1 - f), W0 * math.sqrt(f * (1 - f) / n) / (1 - f) ** 2, f
@@ -37,7 +36,10 @@ mP, sP, fP = count(WP, outP); mK, sK, fK = count(WK, outK)
 g = 1
 for i in range(8): g *= 256 - 2 ** i
 Nb = 2 ** 168 * (starts / att) * rows * 64 / tries; W = Nb / g / g; rel = 1 / math.sqrt(n)
-WU = W + 3 * W * rel; room = WU - (WP + D); lam = n / WU; exp_missing = room * math.exp(-lam)
+WU = W + 3 * W * rel; lam = n / WU
+# union bound over the values outside a reference set fixed before the uniform draws (P, or the independent K);
+# W_P and W_K are lower bounds on the mass of those sets, W_U an upper bound on the total mass
+expP = (WU - WP) * math.exp(-lam); expK = (WU - WK) * math.exp(-lam)
 res = {
     "nFairDraws": n, "nOutPDraws": outP, "nOutKDraws": outK, "pubPctOut": 100 * fP,
     "pubOutsideExact": mP, "pubOutsideSE": sP, "nFairOutsideExact": mK, "nFairOutsideSEexact": sK,
@@ -49,7 +51,8 @@ for nm, gpu in (("Cpu", "0"), ("Gpu", "1")):
     d = [int(c[7]) // 2 for c in cl if int(c[3]) == mode]
     res[f"disp{nm}"] = statistics.pvariance(d) / statistics.mean(d)
 print(f"symmetric weight: {symW} = {float(symW):.4f} ({nSym} classes)")
-print(f"expected number of unknown values (model): {exp_missing:.2e}; with the 0.00135 tail: {exp_missing + 0.00135:.5f}")
+print(f"model estimate, reference P: expected missed {expP:.4f}, probability {expP + 0.00135:.4f}")
+print(f"model estimate, reference K: expected missed {expK:.2e}, probability {expK + 0.00135:.5f}")
 bad = 0
 for k, v in res.items():
     ref = val(k); tol = max(abs(ref) * 2e-3, 0.5 if abs(ref) >= 10 else 2e-3)   # numbers.tex rounds to integers or decimals

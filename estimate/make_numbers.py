@@ -314,21 +314,26 @@ for nm, cl in (("Cpu", [c for c in cs if not c[8]]), ("Gpu", [c for c in cs if c
     mode = collections.Counter(c[2] for c in cl).most_common(1)[0][0]
     d = np.array([c[5] // 2 for c in cl if c[2] == mode], float); r = d.var() / d.mean(); se = math.sqrt(2 / len(d))
     out[f"disp{nm}"] = f"{r:.4f}"; out[f"disp{nm}SE"] = f"{se:.4f}"; out[f"disp{nm}Calls"] = len(d)
-# Model-based completeness (review rounds 1-2). Model: the draws are independent and each lands in a class C with
+# Model-based completeness (review rounds 1-3). Model: the draws are independent and each lands in a class C with
 # probability (1/|G(C)|)/W. W is bounded from above WITHOUT the invariant, by the count of bilinear maps:
-# W <= W_hat + 3 se (one-sided, failure TAIL). Every value of the invariant that no known class has carries mass
-# >= 1 (its classes have trivial groups), and the known values carry mass >= W_seen = W_P + (new values found), the
-# weights of their representatives. So there are at most W_U - W_seen unseen values, each missed with probability
-# <= exp(-n / W_U).
+# W <= W_U = W_hat + 3 se (one-sided, failure TAIL). The union bound runs over a reference set fixed BEFORE the
+# uniform draws: the published set P, or the set K of the independent sampler. The representative weights W_P, W_K
+# are lower bounds on their true mass (classes sharing a known value only add mass). Every value outside the
+# reference set carries mass >= 1 (Theorem 2: its classes have trivial groups). So at most W_U - W_ref values lie
+# outside it, each missed by all n draws with probability <= exp(-n / W_U); their expected number missed is at most
+# (W_U - W_ref) exp(-n / W_U). (Subtracting the values found by these same draws would not be valid.)
 TAIL = 0.00135
 def up(v, d=2):                                        # round up, so that an upper bound stays an upper bound
     e = math.floor(math.log10(v))
     return f"{math.ceil(v * 10 ** d) / 10 ** d:.{d}f}" if v >= 10 ** -d else f"{math.ceil(v / 10 ** e)}\\cdot10^{{{e}}}"
-Whatm = u["Nb"] / g / g; Wse = Whatm * u["rel"]; WU = Whatm + 3 * Wse; Wseen = WP + DP
-lamM = nf / WU; roomM = max(WU - Wseen, 0.0); vM = roomM * math.exp(-lamM)
+Whatm = u["Nb"] / g / g; Wse = Whatm * u["rel"]; WU = Whatm + 3 * Wse; lamM = nf / WU
 out["massW"] = fmt(int(round(Whatm))); out["massWse"] = fmt(int(round(Wse))); out["massWU"] = fmt(int(round(WU)))
-out["seenW"] = fmt(int(round(Wseen))); out["roomW"] = fmt(int(math.ceil(roomM))); out["massLam"] = f"{lamM:.2f}"
-out["massExpMissing"] = up(vM, 4) if vM >= 1e-4 else up(vM); out["massFail"] = up(vM + TAIL, 4)
+out["massLam"] = f"{lamM:.2f}"
+for nm, Wref in (("P", WP), ("K", WK)):
+    room = WU - Wref; v = room * math.exp(-lamM)
+    out[f"room{nm}"] = fmt(int(math.ceil(room))); out[f"massExp{nm}"] = up(v, 4) if v >= 1e-4 else up(v)
+    out[f"massFail{nm}"] = up(v + TAIL, 3) if v + TAIL >= 0.01 else up(v + TAIL, 4)
+out["refWP"] = fmt(int(round(WP))); out["refWK"] = fmt(int(round(WK)))
 # the same model with the known set P (needs the invariant to separate the classes, so that W_P is exact)
 def bound(Wk, mm, mse_):
     X = mm + 3 * mse_; lam = nf / (Wk + X); v = X * math.exp(-lam); return lam, v, v + TAIL
