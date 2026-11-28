@@ -19,7 +19,7 @@ for ax, u in ((a, U), (b, 1.0)):
     ax.plot(x, D * (1 - np.exp(-lam)) / u, ":", color="black", lw=0.8, label="expected, all weights 1")
     ax.set_xlabel("draws (millions)")
 a.set_ylabel("classes outside the published lists\n(millions)"); a.set_ylim(0, 1.1 * m / U)
-a.text(0.02 * x[-1], m / U * 1.02, "model-free count", fontsize=8, color="#2a78d6", va="bottom")
+a.text(0.02 * x[-1], m / U * 1.02, "count from the share of draws", fontsize=8, color="#2a78d6", va="bottom")
 a.legend(frameon=False, fontsize=8, loc="lower right"); a.set_title("(a) All draws", fontsize=9, loc="left")
 b.set_ylim(m - 4 * mse, m + 3 * mse); b.set_xlim(x[-1] * 0.4, x[-1])
 b.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:,.0f}"))

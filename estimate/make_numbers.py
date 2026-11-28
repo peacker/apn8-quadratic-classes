@@ -7,7 +7,8 @@ the per-call counters of the uniform sampler (server_results/epyc*/gen/m*.sum).
 usage: tools/make_numbers.py SYMFILE > numbers.tex"""
 import glob, collections, sys, datetime, math, statistics
 import numpy as np
-R = "../../learning/quad"
+import os
+R = os.environ.get("APN8_QUAD", "../../learning/quad")   # working tree of the sampler results (override with APN8_QUAD)
 def fmt(x): return f"{x:,}".replace(",", "{,}")
 def pct(a, b, d=1): return f"{100 * a / b:.{d}f}"
 idx = {}
@@ -34,6 +35,7 @@ def lines(fn, sn=snap):
             if pos > sn[fn]: break
             yield l.decode()
 cnt = collections.Counter(); Mof = {}; st = collections.Counter()
+lastev = {}; pairbad = [0]
 # uniform sampler rows (tens of millions): per source (one call) the number of rows, and for each draw (rows 2i, 2i+1
 # of a call are one positive G7) the key of row 2i as an integer, with the source id; compact arrays, not tuples
 import array
@@ -49,7 +51,10 @@ for fn in snap:
                 j = sid.get(t[0])
                 if j is None: j = sid[t[0]] = len(nrows); nrows.append(0)
                 nrows[j] += 1
-                if int(t[1]) % 2 == 0: mkeys.append(int(t[3], 16)); msid.append(j)
+                if int(t[1]) % 2 == 0: mkeys.append(int(t[3], 16)); msid.append(j); lastev[j] = (int(t[1]), t[3])
+                else:                               # rows 2i, 2i+1 of a call are two solutions of one orbit: same class
+                    pe = lastev.get(j)
+                    if pe is None or pe[0] != int(t[1]) - 1 or pe[1] != t[3]: pairbad[0] += 1
                 if t[3] not in Mof: Mof[t[3]] = t[4]
                 mstat[t[5]] += 1
                 continue
@@ -76,7 +81,13 @@ out["nMfourLP"] = round(len(early4) * len(S4) / len(early4 & S4)); out["nMfourCh
 out["nBgpSeen"] = len(bgpnew & S); out["pctBgpSeen"] = pct(len(bgpnew & S), len(bgpnew))
 symrows = [l.split("\t") for l in open(sys.argv[1])]
 sym = {t[4] for t in symrows}
-SYMW = sum(256 / int(t[3]) for t in symrows)      # sum of 1/|G(C)| over the symmetric classes
+from fractions import Fraction
+# |G(C)| computed directly by symmetric/engine/autq (data/symmetric_group_orders.txt, one line per row of SYMFILE);
+# the automorphism-group orders of the database of Baudrin, Galissant and Perrin (column 4) must equal 256 |G(C)|
+GORD = [int(l.split()[2]) for l in open(os.path.join(os.path.dirname(sys.argv[1]), "symmetric_group_orders.txt"))]
+assert len(GORD) == len(symrows) and all(int(t[3]) == 256 * g_ for t, g_ in zip(symrows, GORD)), "group orders differ"
+SYMWF = sum(Fraction(1, g_) for g_ in GORD); SYMW = float(SYMWF)   # sum of 1/|G(C)| over the symmetric classes
+out["symWexact"] = f"{SYMWF.numerator}/{SYMWF.denominator}"
 out["nSym"] = len(sym); out["nSymSeen"] = len(sym & S); out["pctSymSeen"] = pct(len(sym & S), len(sym))
 out["drawsPerSym"] = f"{sum(cnt[i] // 2 for i in sym & S) / len(sym):.2f}"
 out["drawsPerClass"] = f"{out['nDraws'] / lp:.2f}"
@@ -117,6 +128,7 @@ hs = collections.Counter(cnt[i] // 2 for i in sym & S); ls = sum(k * c for k, c 
 for _ in range(200): l3 = ls * (1 - math.exp(-l3))
 out["nSymUnseen"] = len(sym - S); out["nSymUnseenPred"] = round(sum(hs.values()) * math.exp(-l3) / (1 - math.exp(-l3)))
 assert set(st) <= {"none"} and set(mstat) <= {"none"}, (st, mstat)   # no draw is CCZ-equivalent to a permutation
+out["pairBad"] = pairbad[0]; assert pairbad[0] == 0, f"{pairbad[0]} rows not paired with the row before"
 for nm in ("new", "pub"):
     rows = [l.split() for l in open(f"../../n8search/pilots/data/prof_{nm}.tsv")]
     n = len(rows); reach = sum(r[6] == "1" for r in rows)
@@ -296,30 +308,46 @@ for nm, cl in (("Cpu", [c for c in calls["s"] if not c[8]]), ("Gpu", [c for c in
 cs = calls["s"]; NS = sum(c[2] for c in cs)
 out["nStarts"] = f"{NS / 1e11:.2f}\\cdot10^{{11}}"; out["chainPerStart"] = f"{sum(c[3] for c in cs) / NS:.2f}"
 out["gsevenPerStart"] = f"{sum(c[10] for c in cs) / NS:.4f}"; out["drawsPerStartE"] = f"{nf / NS * 1e4:.3f}"
-# start-level clustering: starts are independent, so if no start gave two draws the number of draws of a call would
-# be Poisson. The index of dispersion r = Var/mean of the draws per call estimates 1 + E[X(X-1)]/E[X], X = draws of
-# one start; c = r - 1 is the share of draws that share a start with another draw (to first order).
-cup = 0.0
+# start-level clustering (a diagnostic of the model, not used in the bound): for independent starts with X draws
+# each, mean mu = E[X], the draws of a call of S starts have Var/mean = 1 + E[X(X-1)]/E[X] - mu.
 for nm, cl in (("Cpu", [c for c in cs if not c[8]]), ("Gpu", [c for c in cs if c[8]])):
     mode = collections.Counter(c[2] for c in cl).most_common(1)[0][0]
     d = np.array([c[5] // 2 for c in cl if c[2] == mode], float); r = d.var() / d.mean(); se = math.sqrt(2 / len(d))
     out[f"disp{nm}"] = f"{r:.4f}"; out[f"disp{nm}SE"] = f"{se:.4f}"; out[f"disp{nm}Calls"] = len(d)
-    cup = max(cup, r - 1 + 3 * se)
-out["clusterUp"] = f"{100 * cup:.1f}"
-# Completeness with the uncertainty in m and W (review, R4). With probability about 1 - TAIL (one-sided normal, 3 SE)
-# the number of classes outside the known set is at most m + 3 SE, so W <= W_known + m + 3 SE. Only n (1 - cup) draws
-# are counted, to allow for draws that share a start. P(some class still unseen) <= expected number + TAIL.
+# Model-based completeness (review rounds 1-2). Model: the draws are independent and each lands in a class C with
+# probability (1/|G(C)|)/W. W is bounded from above WITHOUT the invariant, by the count of bilinear maps:
+# W <= W_hat + 3 se (one-sided, failure TAIL). Every value of the invariant that no known class has carries mass
+# >= 1 (its classes have trivial groups), and the known values carry mass >= W_seen = W_P + (new values found), the
+# weights of their representatives. So there are at most W_U - W_seen unseen values, each missed with probability
+# <= exp(-n / W_U).
 TAIL = 0.00135
-def bound(Wk, mm, mse_):
-    X = mm + 3 * mse_; lam = nf * (1 - cup) / (Wk + X); v = X * math.exp(-lam); return lam, v, v + TAIL
 def up(v, d=2):                                        # round up, so that an upper bound stays an upper bound
     e = math.floor(math.log10(v))
     return f"{math.ceil(v * 10 ** d) / 10 ** d:.{d}f}" if v >= 10 ** -d else f"{math.ceil(v / 10 ** e)}\\cdot10^{{{e}}}"
+Whatm = u["Nb"] / g / g; Wse = Whatm * u["rel"]; WU = Whatm + 3 * Wse; Wseen = WP + DP
+lamM = nf / WU; roomM = max(WU - Wseen, 0.0); vM = roomM * math.exp(-lamM)
+out["massW"] = fmt(int(round(Whatm))); out["massWse"] = fmt(int(round(Wse))); out["massWU"] = fmt(int(round(WU)))
+out["seenW"] = fmt(int(round(Wseen))); out["roomW"] = fmt(int(math.ceil(roomM))); out["massLam"] = f"{lamM:.2f}"
+out["massExpMissing"] = up(vM, 4) if vM >= 1e-4 else up(vM); out["massFail"] = up(vM + TAIL, 4)
+# the same model with the known set P (needs the invariant to separate the classes, so that W_P is exact)
+def bound(Wk, mm, mse_):
+    X = mm + 3 * mse_; lam = nf / (Wk + X); v = X * math.exp(-lam); return lam, v, v + TAIL
 lP, vP, tP = bound(WP, mP, mPse); lK, vK, tK = bound(WK, u["m"], u["mse"])
 out["pubLamU"] = f"{lP:.2f}"; out["pubExpMissing"] = up(vP, 3); out["pubFail"] = up(tP, 3)
 out["uniLamU"] = f"{lK:.2f}"; out["uniExpMissing"] = up(vK, 4); out["uniFail"] = up(tK, 4)
 out["tailProb"] = f"{TAIL:.5f}".rstrip("0")
 out["nOutPDraws"] = noP; out["nOutKDraws"] = u["no"]
+# compact per-call record for the artifact (review round 2): enough to recompute f, m, the count of bilinear maps,
+# the dispersion and the bounds without the 13 GB of output rows
+outPm = ~np.isin(mkeys, Parr); outKm = ~np.isin(mkeys, Karr)
+perP = np.bincount(msid[outPm], minlength=len(nrows)); perK = np.bincount(msid[outKm], minlength=len(nrows))
+with open("figures/calls.tsv", "w") as fc_:
+    fc_.write("server\tsource\ttime\tstarts\tchain_attempts\tL6_tries\tvalid_L6\toutput_rows\tnonstd\tgpu\tdraws_outside_P\tdraws_outside_K\n")
+    for c in cs:
+        jj = sid.get(c[6])
+        fc_.write(f"{c[0]}\t{c[6]}\t{c[1]}\t{c[2]}\t{c[3]}\t{c[4]}\t{c[10]}\t{c[5]}\t{c[9]}\t{int(c[8])}\t"
+                  f"{0 if jj is None else perP[jj]}\t{0 if jj is None else perK[jj]}\n")
+assert sum(c[5] // 2 for c in cs) == nf and int(perP.sum()) >= noP
 # frequency of frequencies of the classes outside P (review): how many were drawn once, twice, ...
 with open("figures/freq_of_freq.tsv", "w") as ff_:
     ff_.write("times_drawn\tclasses_outside_P\n")

@@ -7,11 +7,14 @@ Code and small data files of the paper
 The paper gives a uniform sampler. It draws every APN bilinear map on F_2^8, that is every quadratic APN
 (8,8)-function up to affine terms, with the same probability. It builds on the variable approach of Beierle,
 Langevin, Leander, Polujan and Rasoolzadeh (arXiv:2508.04644, "BLLPR"), and runs on CPUs and NVIDIA GPUs. It found
-2,000,780 classes that are in no published list. With high probability, the 5,813,648 known classes are all of
-them. The paper also classifies, by exhaustive search, the classes with a linear self-equivalence of prime order,
-and reports the methods that did not find classes faster.
+2,000,780 classes that are in no published list. A class invariant proves that the 5,813,648 known classes are
+pairwise inequivalent. In a model of independent draws, it is very unlikely that a value of the invariant was
+missed; if the invariant also separates the classes, 5,813,648 is very likely the number of classes. The paper
+also searches exhaustively, with a computer, the functions with a linear self-equivalence of prime order (every
+one has the invariant of one of 12,775 published classes), and reports the methods that did not find classes
+faster.
 
-The scripts are copied as they were run. Their relative paths refer to the original working tree (see "Paths").
+The scripts are copied as they were run, except that `uniform/mass8.c` now reports incomplete searches in its test mode (`-g7`). Their relative paths refer to the original working tree (see "Paths").
 The numbers of the paper are in `estimate/numbers.tex`, as written by `estimate/make_numbers.py`.
 
 ## Where the class lists are
@@ -33,9 +36,9 @@ differential spectrum and the extended Walsh spectrum of the ortho-derivative.
 | `lib/apnsearch/` | Sec. 2 | Python library: APN test, ortho-derivative invariant, CCZ-to-permutation test (counting criterion and dual test) |
 | `uniform/` | Sec. 3, 5 | `mass8.c`: the uniform sampler on CPUs (`-mass`; build with `-DSPLITMIX`); `mass_worker.sh`, `mass_gpu_worker.sh`: one server worker on a CPU thread or on a GPU; `small.c`: exact check of the estimator for n = 4, 5 (Sec. 5.4); `rngtest/`: step-1 acceptance with xorshift64 and splitmix64 (Sec. 3.6; `summary.py` prints it) |
 | `gpu/cuda/` | Sec. 3.5 | `mass8g.cu`: the uniform sampler on NVIDIA GPUs (same steps and generator as `mass8 -mass`); `cpu.c`, `Makefile` |
-| `sampler/` | Sec. 3, 4, 5.5, 7 | `testall.py`, `fastclass.py`: class key, M and permutation test of each output; `build_db.py`: class index from the outputs; `varext.c`, `varext_worker.sh`: the sampler of the independent sample (Sec. 5.5); `profile.c`: bent-component profile against the filters of BLLPR (Sec. 4.3); `gen6.c`, `switch2.c`: coordinate approach and switching (Sec. 7) |
-| `estimate/` | Sec. 4, 5 | `make_numbers.py`: every number of the paper, as LaTeX macros (`numbers.tex`); `rarefaction.py`: the data snapshot that `make_numbers.py` reads; `uniform.py`: Figure 1; `freq_of_freq.tsv`: how many classes outside the published lists were drawn once, twice, ... |
-| `symmetric/` | Sec. 6 | `types8.tsv`: the 107 types; `sym_setup.py`: space W of each type (`types/W/`); `engine/sym10t.c`: search engine (built as `sym8k`); `engine/autq.c`, `engine/typeaudit.py`: audit against published automorphism groups; `engine/fixlemma.py`: fixed-space exclusions; `classify.py`, `enumerate.py`; `types_table.tsv`: every type with its matrices, fixed-space dimensions, exclusion, search run, leaves and classes; `results/`: the outputs of every run and the 12,775 classes (`symmetric_classes_bgp26.tsv`) |
+| `sampler/` | Sec. 3, 4, 5.5, 7 | `testall.py`: class key, M and permutation test of each output (every output function is tested); `fastclass.py`: the same with results cached by key, used only to classify the leaves of the symmetric search; `build_db.py`: class index from the outputs; `varext.c`, `varext_worker.sh`: the sampler of the independent sample (Sec. 5.5); `profile.c`: bent-component profile against the filters of BLLPR (Sec. 4.3); `gen6.c`, `switch2.c`: coordinate approach and switching (Sec. 7) |
+| `estimate/` | Sec. 4, 5 | `make_numbers.py`: every number of the paper, as LaTeX macros (`numbers.tex`); `rarefaction.py`: the data snapshot that `make_numbers.py` reads; `uniform.py`: Figure 1; `freq_of_freq.tsv`: how many classes outside the published lists were drawn once, twice, ...; `calls.tsv.gz`: one line per included call (starts, attempts, tries, valid L6, output rows, flags, draws outside P and K); `reproduce.py`: recomputes the statistics of Sec. 5.2-5.3 from these files alone and compares them with `numbers.tex` |
+| `symmetric/` | Sec. 6 | `types8.tsv`: the 107 types; `sym_setup.py`: space W of each type (`types/W/`); `engine/sym10t.c`: search engine (built as `sym8k`); `engine/autq.c`: order of G(F); `symmetric_group_orders.txt`: its output for the 12,775 classes, used for the exact weights; `engine/typeaudit.py`: audit against published automorphism groups; `engine/fixlemma.py`: fixed-space exclusions; `classify.py`, `enumerate.py`; `types_table.tsv`: every type with its matrices, fixed-space dimensions, exclusion, search run, leaves and classes; `results/`: the outputs of every run and the 12,775 classes (`symmetric_classes_bgp26.tsv`) |
 | `pilots/` | Sec. 7 | the attempts that did not find classes faster: restriction starts (`restrict6.py`, `perstart.sh`, `perstart_eval.py`), relaxed filters (`m4/gen6b.c`), M = 4 by construction (`m4/gen4m.c`), structure of the M = 4 classes (`m4/*.py`); `results/`: their outputs and logs, and the profile tables of Sec. 4.3 (`prof_new.tsv`, `prof_pub.tsv`) |
 | `langevin/` | Sec. 4.1 | `orthokey.c`, `hashkeys.py`: fast class keys for the 11.9 million functions of P. Langevin's data file (checked against `lib/apnsearch` by `checkpy.py`); `mkshards.py`, `compare.py`: the comparison with the other lists |
 | `tools/check_manifest.py` | | SHA-256 of every tracked file (`MANIFEST.sha256`) |
@@ -82,6 +85,8 @@ both kinds.
 | The generator matters | Sec. 3.6 | `uniform/rngtest/summary.py` prints the step-1 acceptance rates of the runs in `rngtest/`. |
 | The symmetric search agrees with the literature | Sec. 6.4 | `symmetric/engine/typeaudit.py` and `autq.c` compare the classes found for each type with the published automorphism groups. |
 | Every output is APN, with the right key and test | Sec. 3.4 | `sampler/testall.py` recomputes everything from the lookup table. |
+| The statistics follow from the released data | Sec. 5 | `python3 estimate/reproduce.py` (about 10 s) recomputes the counts, the count of bilinear maps, the dispersion and the completeness estimate from `calls.tsv.gz`, `freq_of_freq.tsv` and `symmetric/symmetric_group_orders.txt`. |
+| No search was cut short | Sec. 3.2 | No line of `calls.tsv.gz` has more than 46 output rows on a CPU, while one G7 at the limit of 64 orbits gives 128; GPU calls are marked if the uncapped GPU count differs from the output, and no included call is marked. `mass8 -g7` exits with status 2 or 3 if its search was incomplete. |
 
 ## Environment of the runs
 

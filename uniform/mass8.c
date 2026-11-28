@@ -504,6 +504,9 @@ int main(int argc, char **argv) {
         fprintf(stderr, "test mode: %ld nodes, %ld outputs; nodes by depth:", nodes, out_count);
         for (int d = 0; d < 8; d++) fprintf(stderr, " %ld", depthcount[d]);
         fprintf(stderr, "\n");
+        /* incomplete searches must not look complete (review round 2): node limit -> status 2, cap reached -> 3 */
+        if (nodes > node_limit) { fprintf(stderr, "test mode: INCOMPLETE, node limit reached\n"); return 2; }
+        if (cap_left <= 0) { fprintf(stderr, "test mode: INCOMPLETE, cap of %ld orbits reached\n", cap); return 3; }
         return 0;
     }
     if (!in) { fprintf(stderr, "usage: varext -in QAPN-6-8 -seed S -starts K [-tries T] [-cap C] [-skipr0]\n"); return 1; }
